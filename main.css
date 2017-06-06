@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css?family=Boogaloo');
+@import url('https://fonts.googleapis.com/css?family=Raleway:600');
+
+body {
+  background: black;
+  color: white;
+}
+
+#main {
+  width: 90vw;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  text-align: center;
+  font-size: 70px;
+  font-family: 'Boogaloo', cursive;
+}
+
+#main h3 {
+  font-size: 30px;
+}
+
+#subtext {
+  font-family: 'Raleway', sans-serif;
+  position: absolute;
+  color: white;
+  font-size: 15px;
+  top: 15px;
+  left: 30px;
+}
+
+#login title {
+  color: white;
+}
+
+.admintitle {
+  font-family: 'Boogaloo', sans-serif;
+  color: white;
+  text-align: center;
+  font-size: 50px;
+}
+
+#val {
+  font-family: 'Boogaloo', sans-serif;
+  font-size: 25px;
+}

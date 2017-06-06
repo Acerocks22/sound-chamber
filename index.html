@@ -1,0 +1,169 @@
+<!-- Pretend there's an <html> tag here lel-->
+<head>
+  <title>The Sound Chamber</title>
+  <link rel="stylesheet" type="text/css" href="main.css" />
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script type="text/javascript"></script>
+</head>
+<body>
+  <div id="subtext"><p>*Make sure you have a mic plugged in for this to work :)</p></div>
+  <div id="main">
+    <h2>The Sound Chamber</h2>
+    <h3>Allow the site to use your mic and start talking.*</h3>
+    <button style="display: none" id="startListen" width="100px">BEGIN</button>
+    <!-- Hidden but kept if ever needed for debugging -->
+  	<p style="display: none">
+  	  <button id=startRecord>start</button>
+  	  <button id=stopRecord disabled>stop</button>
+  	</p>
+  	<!-- Hidden for secret mysteriousness ;). Can unhide in DevTools if needed to debug. -->
+  	<p id="list" style="display: none;">
+  		<audio id=recordedAudio></audio>
+  		<!-- Don't really need this but I kept it just in case-->
+  		<a id=audioDownload></a>
+  	</p>
+  </div>
+  <script>
+    //These next two functions are used to retrieve the volume of the mic input. Necessary if you want the code to work. Copied from some website I found. Don't try to understand them.
+    function volumeAudioProcess( event ) {
+    	var buf = event.inputBuffer.getChannelData(0);
+        var bufLength = buf.length;
+    	var sum = 0;
+        var x;
+        for (var i=0; i<bufLength; i++) {
+        	x = buf[i];
+        	if (Math.abs(x)>=this.clipLevel) {
+        		this.clipping = true;
+        		this.lastClip = window.performance.now();
+        	}
+        	sum += x * x;
+        }
+        var rms =  Math.sqrt(sum / bufLength);
+        this.volume = Math.max(rms, this.volume*this.averaging);
+    }
+    // Function numero dos
+    function createAudioMeter(audioContext,clipLevel,averaging,clipLag) {
+    	var processor = audioContext.createScriptProcessor(512);
+    	processor.onaudioprocess = volumeAudioProcess;
+    	processor.clipping = false;
+    	processor.lastClip = 0;
+    	processor.volume = 0;
+    	processor.clipLevel = clipLevel || 0.98;
+    	processor.averaging = averaging || 0.95;
+    	processor.clipLag = clipLag || 750;
+    
+    	processor.connect(audioContext.destination);
+    
+    	processor.checkClipping =
+    		function(){
+    			if (!this.clipping)
+    				return false;
+    			if ((this.lastClip + this.clipLag) < window.performance.now())
+    				this.clipping = false;
+    			return this.clipping;
+    		};
+    
+    	processor.shutdown =
+    		function(){
+    			this.disconnect();
+    			this.onaudioprocess = null;
+    		};
+    
+    	return processor;
+    }
+    
+    var meter;
+    var state;
+    // Adjustable, basically defines how many audio clips can be running at one time.
+    var audioLimit = 22;
+    // Ask for permission to use Mic. Uses getUserMedia which is deprecated on http:// domains only since it's considered an OP feature.
+    window.onload = function() {
+    navigator.mediaDevices.getUserMedia({audio:true})
+    	.then(stream => {
+    		rec = new MediaRecorder(stream);
+    		// Now those functions above are coming into play:
+        var AudioContext = window.AudioContext || window.webkitAudioContext;
+        var audioCxt = new AudioContext();
+        var mediaStreamSource = audioCxt.createMediaStreamSource(stream);
+    
+        // Creates a new volume meter and connects it. This 'meter' var is where you get all your volume stats from. Put it in console.log(), there's some neat data in there.
+        meter = createAudioMeter(audioCxt);
+        mediaStreamSource.connect(meter);
+      
+    		rec.ondataavailable = e => {
+          state = rec.state;
+    			audioChunks.push(e.data);
+          console.log(rec.state);
+          // Once it stops recording, makes the recording into a soundfile and uploads it to the Audio element.
+    			if (rec.state == "inactive") {
+            let blob = new Blob(audioChunks,{type:'audio/x-mpeg-3'});
+            var sound = document.createElement('audio');
+            sound.src = URL.createObjectURL(blob);
+            sound.controls=true;
+            sound.autoplay=true;
+            sound.volume=0.5;
+            // This line is important so it actually sends multiple messages.
+            document.getElementById('list').appendChild(sound);
+            setInterval(function() {
+              var all = document.getElementsByTagName("audio");
+              // This is where 'audioLimit' from before comes into play. If there's more clips than the limit, delete the oldest one.
+              if (all.length > audioLimit) {
+                 $('audio').first().remove();
+              }
+              // Loops through each Audio element and plays each one every second. Even if audio file is longer than a second it still waits till it is finished playing, then restarts immediately.
+              for (var i = 0; i < all.length; i++) {
+                all[i].play();
+              }
+            },1000);
+         }
+    		}
+    	})
+    	.catch(e=>console.log(e));
+    
+    // Buncha vars
+    var isRecording = false;
+    var newthresh = localStorage.getItem("vol");
+    var threshold;
+    // An if statement from me trying to set up an Admin page for the site. Has no practical application yet. 'threshold' is the volume it checks at.
+    if (newthresh == null) {
+      threshold = 0.09;
+    } else {
+     threshold = newthresh;
+    }
+    // WARNING: Super buggy code ahead! Sends like a million errors a minute to console, but it works so ¯\_(ツ)_/¯
+    // There's definitely a better way to do this. Be my guest if you wanna find it out.
+    setInterval(function(){
+      if (meter.volume > threshold && isRecording == false || state == 'inactive' && meter.volume > 0.15) {
+        isRecording = true;
+        startRecord.disabled = true;
+        stopRecord.disabled=false;
+        // Unnecessary console.log().
+        console.log("Volume is above "+threshold);
+        audioChunks = [];
+        rec.start();
+      } else if (meter.volume <= threshold && isRecording == true) {
+        isRecording = false;
+        startRecord.disabled = false;
+        stopRecord.disabled=true;
+        // Unnecessary console.log().
+        console.log("Volume is below "+threshold);
+        rec.stop();
+      }
+    }, 50);
+    
+    // The functions for the lil buttons I hid earlier.
+    startRecord.onclick = e => {
+      startRecord.disabled = true;
+      stopRecord.disabled=false;
+      audioChunks = [];
+      rec.start();
+    }
+    stopRecord.onclick = e => {
+      startRecord.disabled = false;
+      stopRecord.disabled=true;
+      rec.stop();
+    }
+    }
+  </script>
+</body>
+<!-- Pretend there's an </html> tag here lel -->
